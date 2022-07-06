@@ -319,9 +319,13 @@ class Interface():
         self.watch_window.geometry('825x865')
         self.watch_window.protocol("WM_DELETE_WINDOW", self.close_watch)
         self.plot_canvas = []
+        self.plot_line_tag = []
+        self.plot_text = []
         for i in range(16):
                 self.plot_canvas.append(tk.Canvas(self.watch_window, width=400, height=100, bg=self.WATCH_BG_COLOR, bd=-1, highlightthickness  = 0,))
                 self.plot_canvas[i].grid(column=i//8, row=i%8, padx=5, pady=5)
+                self.plot_line_tag.append(self.plot_canvas[i].create_line([(0,50),(400,50)], fill=self.WATCH_FG_COLOR, width=2))
+                self.plot_text.append(self.plot_canvas[i].create_text(1,1,text="", anchor=tk.NW, fill=self.WATCH_FG_COLOR))
 
     def close_watch(self):
         self.watch = False
@@ -332,10 +336,15 @@ class Interface():
         for k,c in enumerate(ch):
             ymin = min(data[c])
             ymax = max(data[c])
-            line = [(400*i/len(data[c]), 20+80*(-(data[c][i]-ymin)/(1e-12 + ymax-ymin) +1)) for i in range(len(data[c]))]
-            self.plot_canvas[k].delete('all')
-            self.plot_canvas[k].create_line(line, fill=self.WATCH_FG_COLOR, width=2)
-            self.plot_canvas[k].create_text(1,1,text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)), anchor=tk.NW, fill=self.WATCH_FG_COLOR)
+            stepsz = max(1, len(data[c])//400)
+            subdata = data[c][::stepsz]
+            line = []
+            for i in range(len(subdata)):
+                line.append(400*i/len(subdata))
+                line.append(20+80*(-(subdata[i]-ymin)/(1e-12 + ymax-ymin) +1))
+
+            self.plot_canvas[k].coords(self.plot_line_tag[k], line)#(line, fill=self.WATCH_FG_COLOR, width=2)
+            self.plot_canvas[k].itemconfigure(self.plot_text[k], text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)))#(1,1,text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)), anchor=tk.NW, fill=self.WATCH_FG_COLOR)
 
     def chan_indices(self):
         ind = []
