@@ -26,6 +26,10 @@ class ChannelInterface:
 
 class Interface():
     def __init__(self):
+
+        self.WATCH_BG_COLOR = '#2e332e'
+        self.WATCH_FG_COLOR = '#6bff91'
+        
         # oscilloscope object
         self.scp = None
         self.n_instr = 0
@@ -40,7 +44,7 @@ class Interface():
         # Key default variables:
         self.foldername = tk.StringVar(self.root, os.path.expanduser('~'))
         self.filename = tk.StringVar(self.root, "datastream")
-        fileext_list = [".csv", ".hdf5"]
+        fileext_list = [".hdf5", ".csv"]
         self.fileext = tk.StringVar(self.root)
         self.fileext.set(fileext_list[0])
 
@@ -310,14 +314,14 @@ class Interface():
     def open_watch(self):
         self.watch = True
         self.watch_button.configure(text="Close", command = self.close_watch)
-        self.watch_window = tk.Toplevel(self.root, bg='#414941')
+        self.watch_window = tk.Toplevel(self.root, bg=self.WATCH_BG_COLOR)
         self.watch_window.title("Watch")
-        self.watch_window.geometry('800x800')
+        self.watch_window.geometry('825x865')
         self.watch_window.protocol("WM_DELETE_WINDOW", self.close_watch)
         self.plot_canvas = []
         for i in range(16):
-                self.plot_canvas.append(tk.Canvas(self.watch_window, width=400, height=100, bg='#414941', bd=-1, highlightthickness  = 0,))
-                self.plot_canvas[i].grid(column=i//8, row=i%8)
+                self.plot_canvas.append(tk.Canvas(self.watch_window, width=400, height=100, bg=self.WATCH_BG_COLOR, bd=-1, highlightthickness  = 0,))
+                self.plot_canvas[i].grid(column=i//8, row=i%8, padx=5, pady=5)
 
     def close_watch(self):
         self.watch = False
@@ -328,10 +332,10 @@ class Interface():
         for k,c in enumerate(ch):
             ymin = min(data[c])
             ymax = max(data[c])
-            line = [(400*i/len(data[c]), 100*0.8*(-(data[c][i]-ymin)/(1e-12 + ymax-ymin) +0.5)) for i in range(len(data[c]))]
+            line = [(400*i/len(data[c]), 20+80*(-(data[c][i]-ymin)/(1e-12 + ymax-ymin) +1)) for i in range(len(data[c]))]
             self.plot_canvas[k].delete('all')
-            self.plot_canvas[k].create_line(line, fill='#0eff00', width=2)
-            self.plot_canvas[k].create_text(1,1,text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)), anchor=tk.NW, fill='#0eff00')
+            self.plot_canvas[k].create_line(line, fill=self.WATCH_FG_COLOR, width=2)
+            self.plot_canvas[k].create_text(1,1,text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)), anchor=tk.NW, fill=self.WATCH_FG_COLOR)
 
     def chan_indices(self):
         ind = []
