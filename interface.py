@@ -6,6 +6,7 @@ import time
 import os
 import datetime
 import h5py
+import threading
 
 class InstrumentBox:
     def __init__(self):
@@ -27,8 +28,8 @@ class Interface():
     def __init__(self):
         # oscilloscope object
         self.scp = None
-
         self.n_instr = 0
+        self.chan_names = []
         
         # Create the GUI base
         self.root = tk.Tk()
@@ -54,7 +55,6 @@ class Interface():
 
         self.stop = False
         self.watch = False
-
 
         mainframe = ttk.Frame(self.root, padding="10")
         mainframe.grid(column=0, row=0, sticky=(tk.N, tk.W, tk.E, tk.S))
@@ -104,7 +104,7 @@ class Interface():
         self.open_button  = ttk.Button(op_frame, text="Open DEV", command=self.open_dev)
         self.arm_button = ttk.Button(op_frame, text="Arm!", state=tk.DISABLED, command=self.arm_dev)
         self.start_button = ttk.Button(op_frame, text="Stream!", state=tk.DISABLED, command=self.start_streaming)
-        self.watch_button = ttk.Button(op_frame, text="Watch!", state=tk.DISABLED)
+        self.watch_button = ttk.Button(op_frame, text="Watch!", command=self.open_watch)
 
         self.open_button.grid(column=0, row=3, columnspan=1, padx=5, pady=5,sticky=tk.W)
         self.arm_button.grid(column=1, row=3, columnspan=1, padx=5, pady=5)
@@ -213,10 +213,16 @@ class Interface():
 
     def arm_dev(self):
         print("Arm device...")
+        # set scope parameters:
         self.scp.sample_frequency = self.freq.get()
         self.scp.resolution = self.res.get()
         self.scp.record_length = self.reclength.get()
         self.scp.measure_mode = libtiepie.MM_STREAM
+
+        # read it back to check:
+        self.freq.set(self.scp.sample_frequency)
+        self.res.set(self.scp.resolution)
+        self.reclength.set(self.scp.record_length)
         
         for c, chan in enumerate(self.scp.channels):
             _c = c%4
@@ -234,7 +240,6 @@ class Interface():
             return value*3600
         elif unit=='d':
             return value*3600*24
-    
 
     def start_streaming(self):
         self.arm_dev()
@@ -242,13 +247,19 @@ class Interface():
 
         self.arm_button.configure(state=tk.DISABLED)
         self.start_button.configure(text="Stop", command = self.stop_streaming)
-        self.watch_button.configure(state=tk.NORMAL)
 
         self.new_file_per = self.compute_period(self.newfileperiod.get(), self.newfileunit.get())
         self.stop = False
 
+        self.run_th = threading.Thread(target=self.run_streaming)
+        self.run_th.start()
+
+    def run_streaming(self):
+        
         fname = os.path.join(self.foldername.get(), self.filename.get())
         okchans = self.chan_indices()
+        self.chan_names = self.get_chan_names()
+
         count = 0
         fcount = 0
         timer = time.time()
@@ -256,7 +267,7 @@ class Interface():
         print("Acquiring on channels:", okchans)
 
         if (self.newfileunit.get()!="infty"):
-            fullfilename = fname+str(fcount).rjust(4,'0')+self.fileext.get()
+            fullfilename = fname+str(fcount).rjust(6,'0')+self.fileext.get()
         else:
             fullfilename = fname+self.fileext.get()
 
@@ -269,7 +280,7 @@ class Interface():
             print("Data chunk", count)
             
             while not (self.scp.is_data_ready or self.scp.is_data_overflow):
-                self.root.after(100)
+                self.root.after(10)
                 
             if self.scp.is_data_overflow:
                 print("Data overflow!")
@@ -282,7 +293,7 @@ class Interface():
             count = count+1
 
             if self.watch:
-                self.show(data, okchans)
+                self.show_data(data, okchans)
 
             if (self.newfileunit.get()!="infty"):
                 if ((time.time() - timer) >= self.new_file_per):
@@ -293,10 +304,34 @@ class Interface():
                     file = self.init_file(fullfilename)
                     timer = time.time()
             
-
-
         file.close()
         self.scp.stop()
+
+    def open_watch(self):
+        self.watch = True
+        self.watch_button.configure(text="Close", command = self.close_watch)
+        self.watch_window = tk.Toplevel(self.root, bg='#414941')
+        self.watch_window.title("Watch")
+        self.watch_window.geometry('800x800')
+        self.watch_window.protocol("WM_DELETE_WINDOW", self.close_watch)
+        self.plot_canvas = []
+        for i in range(16):
+                self.plot_canvas.append(tk.Canvas(self.watch_window, width=400, height=100, bg='#414941', bd=-1, highlightthickness  = 0,))
+                self.plot_canvas[i].grid(column=i//8, row=i%8)
+
+    def close_watch(self):
+        self.watch = False
+        self.watch_button.configure(text="Watch!", command = self.open_watch)
+        self.watch_window.destroy()
+
+    def show_data(self, data, ch):
+        for k,c in enumerate(ch):
+            ymin = min(data[c])
+            ymax = max(data[c])
+            line = [(400*i/len(data[c]), 100*0.8*(-(data[c][i]-ymin)/(1e-12 + ymax-ymin) +0.5)) for i in range(len(data[c]))]
+            self.plot_canvas[k].delete('all')
+            self.plot_canvas[k].create_line(line, fill='#0eff00', width=2)
+            self.plot_canvas[k].create_text(1,1,text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)), anchor=tk.NW, fill='#0eff00')
 
     def chan_indices(self):
         ind = []
@@ -305,7 +340,15 @@ class Interface():
                 ind.append(c)
 
         return ind
-            
+
+    def get_chan_names(self):
+        cnames=[]
+        for i in [0,1,2,3]:
+            for c in [0,1,2,3]:
+                cnames.append(self.instr_list[i].channels[c].name_var.get())
+
+        return cnames
+    
 
     def init_file(self, fname):
         if self.fileext.get()==".csv":
@@ -336,7 +379,7 @@ class Interface():
                 _c = c%4
                 _i = c//4
                 if chan.enabled:
-                    info.attrs["Chan"+str(c)] = self.instr_list[_i].channels[_c].name_var.get()
+                    info.attrs["chan"+str(c+1).rjust(2,'0')] = self.instr_list[_i].channels[_c].name_var.get()
 
             return f
             
@@ -352,18 +395,25 @@ class Interface():
             grp = f.create_group("chunk_"+str(count).rjust(8,'0'))
             grp.attrs["Date"] = str(datetime.datetime.now())
             for c in ch:
-                grp.create_dataset("chan"+str(c).rjust(2,'0'), data=data[c])
+                grp.create_dataset("chan"+str(c+1).rjust(2,'0'), data=data[c])
 
             #print(grp)
         
     def stop_streaming(self):
-        self.stop = True
-        self.arm_button.configure(state=tk.NORMAL)
-        self.start_button.configure(text="Stream!", command = self.start_streaming)
-        self.enable_options()
-        for i in range(self.n_instr-1):
-            for item in self.instr_list[i].frame.winfo_children():
-                item.configure(state=tk.NORMAL)
+        try:
+            self.stop = True
+            self.run_th.join(0)
+            self.run_th = None
+            
+            self.arm_button.configure(state=tk.NORMAL)
+            self.start_button.configure(text="Stream!", command = self.start_streaming)
+            self.enable_options()
+            for i in range(self.n_instr-1):
+                for item in self.instr_list[i].frame.winfo_children():
+                    item.configure(state=tk.NORMAL)
+
+        except (AttributeError, RuntimeError):
+            pass 
 
     def enable_options(self):
         self.open_button.configure(text="Close DEV", command=self.close_dev)
