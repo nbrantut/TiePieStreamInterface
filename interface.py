@@ -463,20 +463,20 @@ class Interface():
             
     def save_config_file(self, filename):
         print("Save config file as", filename, "...")
-        f = open(filename, "w")
-        f.write("Date:"+str(datetime.datetime.now())+os.linesep)
-        f.write("File format:"+self.fileext.get()+os.linesep)
-        f.write("New file period:"+str(self.newfileperiod.get())+os.linesep)
-        f.write("New file unit:"+str(self.newfileunit.get())+os.linesep)
-        f.write("Sampling freq:"+str(self.freq.get())+os.linesep)
-        f.write("Resolution:"+str(self.res.get())+os.linesep)
-        f.write("Record length:"+str(self.reclength.get())+os.linesep)
+        f = open(filename, "w", newline='\n')
+        f.write("Date:"+str(datetime.datetime.now())+'\n')
+        f.write("File format:"+self.fileext.get()+'\n')
+        f.write("New file period:"+str(self.newfileperiod.get())+'\n')
+        f.write("New file unit:"+str(self.newfileunit.get())+'\n')
+        f.write("Sampling freq:"+str(self.freq.get())+'\n')
+        f.write("Resolution:"+str(self.res.get())+'\n')
+        f.write("Record length:"+str(self.reclength.get())+'\n')
         for _i in [0,1,2,3]:
             for _c in [0,1,2,3]:
                 name = "Instr"+str(_i+1)+"_Chan"+str(_c+1)+":"
-                f.write(name+str(self.instr_list[_i].channels[_c].enabled_var.get())+os.linesep)
-                f.write(name+self.instr_list[_i].channels[_c].name_var.get()+os.linesep)
-                f.write(name+str(self.instr_list[_i].channels[_c].scale_var.get())+os.linesep)
+                f.write(name+str(self.instr_list[_i].channels[_c].enabled_var.get())+'\n')
+                f.write(name+self.instr_list[_i].channels[_c].name_var.get()+'\n')
+                f.write(name+str(self.instr_list[_i].channels[_c].scale_var.get())+'\n')
             
         f.close()
 
@@ -490,9 +490,9 @@ class Interface():
         f = open(filename, "r")
         lines = f.readlines()
         f.close()
-        self.fileext.set(lines[1].split(':')[1].strip("\n\r"))
+        self.fileext.set(lines[1].split(':')[1].strip("\n"))
         self.newfileperiod.set(float(lines[2].split(':')[1]))
-        self.newfileunit.set(lines[3].split(':')[1].strip("\n\r"))
+        self.newfileunit.set(lines[3].split(':')[1].strip("\n"))
         self.freq.set(float(lines[4].split(':')[1]))
         self.res.set(int(lines[5].split(':')[1]))
         self.reclength.set(int(lines[6].split(':')[1]))
