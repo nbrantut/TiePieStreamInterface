@@ -1,0 +1,13 @@
+* Tie Pie Streaming Interface
+
+GUI to control TiePie oscilloscopes in streaming mode. Made with Python3 and tkinter.
+
+Dependencies: libtiepie.
+
+This code is quick and dirty but seems to work fine for the intended purpose. It is heavily inspired by the "cecchi leach" interface from ASC Ltd.
+
+Usage: python interface.py
+
+The GUI should be more or less self-explanatory. Be careful when using the watch, as it may result in data overflow. Same thing with using CSV file format: it is slow and is very limited.
+
+You can save configuration file (as .txt) and load it to save time.
