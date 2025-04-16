@@ -180,51 +180,70 @@ class Interface():
     def open_dev(self):
         print("Update device list...")
         libtiepie.device_list.update()
-        for item in libtiepie.device_list:
-            if item.can_open(libtiepie.DEVICETYPE_OSCILLOSCOPE):
-                print("Opening", item.name, "#", item.serial_number)
-                self.scp = item.open_oscilloscope()
-                i = 0
-                try:
-                    sn = item.contained_serial_numbers
-                    print("Contained serial numbers:")
-                    for _sn in sn:
-                        print(_sn)
-                        self.instr_list[i].enabled=True
-                        self.instr_list[i].frame.configure(text="Serial #"+str(_sn))
-                        for item in self.instr_list[i].frame.winfo_children():
-                            item.configure(state=tk.NORMAL)
-                            
-                        i = i+1
-                        
-                except:
-                    sn = item.serial_number
-                    print("Single device")
+        print("Found ", len(libtiepie.device_list), " devices")
+        devlist = libtiepie.device_list
+        ids = [device._get_product_id() for device in devlist]
+        i = 0
+        try:
+            ind = ids.index(2)
+            print("Found combined oscilloscope device")
+            device = devlist[ind]
+            if device.can_open(libtiepie.DEVICETYPE_OSCILLOSCOPE):
+                print("Opening", device.name, "#", device.serial_number)
+                self.scp = device.open_oscilloscope()
+                sn = device.contained_serial_numbers
+                print("Contained serial numbers:")
+                for _sn in sn:
+                    print(_sn)
                     self.instr_list[i].enabled=True
-                    self.instr_list[i].frame.configure(text="Serial #"+str(sn))
+                    self.instr_list[i].frame.configure(text="Serial #"+str(_sn))
                     for item in self.instr_list[i].frame.winfo_children():
                         item.configure(state=tk.NORMAL)
+                            
+                    i = i+1
 
                 self.n_instr = i+1
-                
-                if self.scp.measure_modes & libtiepie.MM_STREAM:
-                    break
-                else:
-                    self.scp = None
+            else:
+                print("Cannot open device")
+                return
+        except:
+            print("Single device")
+            ind = 0
+            device = devlist[ind]
+            if device.can_open(libtiepie.DEVICETYPE_OSCILLOSCOPE):
+                print("Opening", device.name, "#", device.serial_number)
+                self.scp = device.open_oscilloscope()
+                sn = device.serial_number
+                self.instr_list[i].enabled=True
+                self.instr_list[i].frame.configure(text="Serial #"+str(sn))
+                for item in self.instr_list[i].frame.winfo_children():
+                    item.configure(state=tk.NORMAL)
 
-        if self.scp!=None:
-            self.enable_options()
+                self.n_instr = i+1      
+            else:
+                print("Cannot open device")
+                return
+                
+        if self.n_instr>0:
+            if self.scp.measure_modes & libtiepie.MM_STREAM:
+                self.enable_options()
+            else:
+                print("Device does not support streaming mode")
+        else:
+            print("Oscilloscope(s) cannot be opened")
+
+            
 
     def arm_dev(self):
         print("Arm device...")
         # set scope parameters:
-        self.scp.sample_frequency = self.freq.get()
+        self.scp.sample_rate = self.freq.get()
         self.scp.resolution = self.res.get()
         self.scp.record_length = self.reclength.get()
         self.scp.measure_mode = libtiepie.MM_STREAM
 
         # read it back to check:
-        self.freq.set(self.scp.sample_frequency)
+        self.freq.set(self.scp.sample_rate)
         self.res.set(self.scp.resolution)
         self.reclength.set(self.scp.record_length)
         
@@ -257,6 +276,7 @@ class Interface():
 
         self.run_th = threading.Thread(target=self.run_streaming)
         self.run_th.start()
+        #self.run_streaming()
 
     def run_streaming(self):
         
@@ -297,7 +317,7 @@ class Interface():
             count = count+1
 
             if self.watch:
-                self.show_data(data, okchans)
+                self.root.after(0, self.show_data, data, okchans)
 
             if (self.newfileunit.get()!="infty"):
                 if ((time.time() - timer) >= self.new_file_per):
@@ -322,14 +342,17 @@ class Interface():
         self.plot_line_tag = []
         self.plot_text = []
         for i in range(16):
-                self.plot_canvas.append(tk.Canvas(self.watch_window, width=400, height=100, bg=self.WATCH_BG_COLOR, bd=-1, highlightthickness  = 0,))
-                self.plot_canvas[i].grid(column=i//8, row=i%8, padx=5, pady=5)
-                self.plot_line_tag.append(self.plot_canvas[i].create_line([(0,50),(400,50)], fill=self.WATCH_FG_COLOR, width=2))
-                self.plot_text.append(self.plot_canvas[i].create_text(1,1,text="", anchor=tk.NW, fill=self.WATCH_FG_COLOR))
+            self.plot_canvas.append(tk.Canvas(self.watch_window, width=400, height=100, bg=self.WATCH_BG_COLOR, bd=-1, highlightthickness  = 0,))
+            self.plot_canvas[i].grid(column=i//8, row=i%8, padx=5, pady=5)
+            self.plot_line_tag.append(self.plot_canvas[i].create_line([(0,50),(400,50)], fill=self.WATCH_FG_COLOR, width=2))
+            self.plot_text.append(self.plot_canvas[i].create_text(1,1,text="", anchor=tk.NW, fill=self.WATCH_FG_COLOR))
+
+    # Where is create_line and create_text?
 
     def close_watch(self):
         self.watch = False
         self.watch_button.configure(text="Watch!", command = self.open_watch)
+        self.watch_window.update()
         self.watch_window.destroy()
 
     def show_data(self, data, ch):
@@ -343,15 +366,17 @@ class Interface():
                 line.append(400*i/len(subdata))
                 line.append(20+80*(-(subdata[i]-ymin)/(1e-12 + ymax-ymin) +1))
 
-            self.plot_canvas[k].coords(self.plot_line_tag[k], line)#(line, fill=self.WATCH_FG_COLOR, width=2)
+            #self.plot_canvas[k].coords(self.plot_line_tag[k], [line[0],line[1],line[99],line[100],line[-2],line[-1]])
+            self.plot_canvas[k].coords(self.plot_line_tag[k], line) 
+            #(line, fill=self.WATCH_FG_COLOR, width=2)
             self.plot_canvas[k].itemconfigure(self.plot_text[k], text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)))#(1,1,text=self.chan_names[c]+"  range:"+str(round(ymin,4))+" "+str(round(ymax,4)), anchor=tk.NW, fill=self.WATCH_FG_COLOR)
+
 
     def chan_indices(self):
         ind = []
         for c, chan in enumerate(self.scp.channels):
             if chan.enabled:
                 ind.append(c)
-
         return ind
 
     def get_chan_names(self):
@@ -367,7 +392,7 @@ class Interface():
         if self.fileext.get()==".csv":
             f = open(fname, 'w')
             f.write("Date:"+str(datetime.datetime.now())+os.linesep)
-            f.write("Sampling freq:"+str(self.scp.sample_frequency)+os.linesep)
+            f.write("Sampling freq:"+str(self.scp.sample_rate)+os.linesep)
             f.write("Resolution:"+str(self.scp.resolution)+os.linesep)
             f.write("Record length:"+str(self.scp.record_length)+os.linesep)
             f.write(os.linesep)
@@ -385,7 +410,7 @@ class Interface():
             f = h5py.File(fname,'w')
             info = f.create_group("Info")
             info.attrs["Date"] = str(datetime.datetime.now())
-            info.attrs["Sampling_freq"] = self.scp.sample_frequency
+            info.attrs["Sampling_freq"] = self.scp.sample_rate
             info.attrs["Resolution"] = self.scp.resolution
             info.attrs["Record_length"] = self.scp.record_length
             for c, chan in enumerate(self.scp.channels):
@@ -410,7 +435,6 @@ class Interface():
             for c in ch:
                 grp.create_dataset("chan"+str(c+1).rjust(2,'0'), data=data[c])
 
-            #print(grp)
         
     def stop_streaming(self):
         try:
@@ -436,7 +460,7 @@ class Interface():
         for item in self.glob_frame.winfo_children():
             item.configure(state=tk.NORMAL)
 
-        self.freq.set(self.scp.sample_frequency)
+        self.freq.set(self.scp.sample_rate)
         self.res.set(self.scp.resolution)
         self.reclength.set(self.scp.record_length)
         # refresh res list
